@@ -1,7 +1,6 @@
 # 👮‍♂️ Vietnamese Traffic Police (CSGT) Portrait Generation
 
 Dự án nghiên cứu fine-tune mô hình **Stable Diffusion** bằng kỹ thuật **LoRA** để tạo ra hình ảnh chân dung Cảnh sát Giao thông (CSGT) Việt Nam với độ chân thực cao, đúng quy chuẩn quân phục.
-
 ---
 
 ## 📂 Project Structure
@@ -73,3 +72,4 @@ Cấu hình tối ưu cho GPU Tesla P100 16GB:
 ## ⚖️ Quy định sử dụng (Disclaimer)
 
 Dự án này phục vụ mục đích nghiên cứu học thuật. Không sử dụng mô hình để tạo ra nội dung giả mạo, bôi nhọ hoặc vi phạm pháp luật. Người dùng tự chịu trách nhiệm về nội dung sinh ra.
+
