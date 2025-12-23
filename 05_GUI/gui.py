@@ -13,7 +13,7 @@ class GlobalState:
 
 cfg = {
     "base_model": "runwayml/stable-diffusion-v1-5",
-    "lora_path": "../03_training/lora-sd15-police/checkpoint-15",
+    "lora_path": "../03_training/lora-sd15-police/checkpoint-40",
     "device": "cuda" if torch.cuda.is_available() else "cpu"
 }
 
