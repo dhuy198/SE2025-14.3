@@ -1,0 +1,28 @@
+# --- CORE & ACCELERATION ---
+torch
+torchvision
+accelerate
+numpy
+
+# --- HUGGING FACE ECOSYSTEM (Generative AI & LLMs) ---
+transformers
+diffusers
+peft
+qwen-vl-utils
+
+# --- COMPUTER VISION & IMAGE PROCESSING ---
+opencv-python
+Pillow
+imagehash
+tqdm
+
+# --- FACE ANALYSIS & RECOGNITION ---
+deepface
+insightface
+onnxruntime-gpu  # Cần thiết để insightface chạy nhanh trên GPU
+
+# --- DATA CRAWLING ---
+icrawler
+
+# --- WEB INTERFACE ---
+gradio
