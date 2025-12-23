@@ -21,7 +21,7 @@ class TrainingConfig:
     train_data_dir = "../01_crawling/cong_an_dieu_huong" 
     output_dir = "sdxl-lora-cong-an"
 
-    resolution = 1024  # SDXL chuẩn là 1024
+    resolution = 512  # SDXL chuẩn là 1024
     train_batch_size = 64
     num_train_epochs = 50
     learning_rate = 1e-3
