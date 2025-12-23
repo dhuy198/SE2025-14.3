@@ -16,24 +16,20 @@ from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 
 print("***** Bắt đầu huấn luyện SDXL LoRA *****")
-
-# ==============================================================================
-# PHẦN 1: CẤU HÌNH (SDXL Cần nhiều VRAM hơn, ưu tiên 1024x1024)
-# ==============================================================================
 class TrainingConfig:
     pretrained_model_name_or_path = "stabilityai/stable-diffusion-xl-base-1.0"
     train_data_dir = "../01_crawling/cong_an_dieu_huong" 
     output_dir = "sdxl-lora-cong-an"
 
-    resolution = 1024  # SDXL chuẩn là 1024
-    train_batch_size = 1
-    num_train_epochs = 50
-    learning_rate = 1e-4
+    resolution = 512  # SDXL chuẩn là 1024
+    train_batch_size = 64
+    num_train_epochs = 100
+    learning_rate = 1e-3
     lr_scheduler = "constant"
     lr_warmup_steps = 0
     
-    lora_rank = 8
-    lora_alpha = 8
+    lora_rank = 16
+    lora_alpha = 16
 
 config = TrainingConfig()
 
