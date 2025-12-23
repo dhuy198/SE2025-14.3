@@ -12,7 +12,7 @@ class InferenceConfig:
     base_model_path = "runwayml/stable-diffusion-v1-5"
     
     # Đường dẫn đến folder chứa file trong ảnh (adapter_model.safetensors)
-    lora_folder_path = "/datausers3/kttv/tien/ClassificationProjectHimawari/SE/SE2025-14.3/03_training/lora-sd15-police/checkpoint-30"  
+    lora_folder_path = "/datausers3/kttv/tien/ClassificationProjectHimawari/SE/SE2025-14.3/03_training/lora-sd15-police/checkpoint-15"  
     
     prompt_file = "test_prompts.txt"
     output_dir = "inference_results"
