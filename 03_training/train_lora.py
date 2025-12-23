@@ -26,7 +26,7 @@ print("***** Bắt đầu huấn luyện *****")
 class TrainingConfig:
     # --- Model và đường dẫn ---
     pretrained_model_name_or_path = "runwayml/stable-diffusion-v1-5"
-    train_data_dir = "../01_crawling/cong_an_dieu_huong" 
+    train_data_dir = "../01_crawling/cong_an_dieu_huong"
     output_dir = "lora-cong-an-giao-thong"
 
     # --- Tham số huấn luyện ---
@@ -51,7 +51,7 @@ def setup_dummy_data(data_dir):
     print("Tạo dữ liệu giả lập để kiểm tra...")
     data_path = Path(data_dir)
     data_path.mkdir(parents=True, exist_ok=True)
-    
+
     Image.new("RGB", (512, 512), "blue").save(data_path / "cong_an_1.jpg")
     Image.new("RGB", (512, 512), "red").save(data_path / "cong_an_2.jpg")
 
@@ -130,7 +130,7 @@ class CustomImageCaptionDataset(Dataset):
         self.tokenizer = tokenizer
         self.transforms = transforms
         self.data = []
-        
+
         # Đọc file metadata.jsonl
         metadata_path = os.path.join(data_dir, "metadata.jsonl")
         with open(metadata_path, "r", encoding="utf-8") as f:
@@ -142,15 +142,15 @@ class CustomImageCaptionDataset(Dataset):
 
     def __getitem__(self, idx):
         item = self.data[idx]
-        
+
         # Lấy đường dẫn ảnh và caption
         image_path = os.path.join(self.data_dir, item["file_name"])
         text = item["text"]
-        
+
         # Mở và xử lý ảnh
         image = Image.open(image_path).convert("RGB")
         pixel_values = self.transforms(image)
-        
+
         # Tokenize text
         input_ids = self.tokenizer(
             text,
@@ -159,7 +159,7 @@ class CustomImageCaptionDataset(Dataset):
             truncation=True,
             return_tensors="pt"
         ).input_ids[0] # Lấy phần tử đầu tiên để loại bỏ batch dimension
-        
+
         return {"pixel_values": pixel_values, "input_ids": input_ids}
 
 # <--- THAY ĐỔI: Khởi tạo Dataset tùy chỉnh
