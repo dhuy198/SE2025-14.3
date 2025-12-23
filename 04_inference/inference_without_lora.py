@@ -1,41 +1,74 @@
 import torch
-from diffusers import AutoPipelineForText2Image
 import os
+from diffusers import StableDiffusionPipeline
 from tqdm import tqdm
 
-# 1. Cấu hình
-model_id = "stabilityai/sdxl-turbo" # Model thế hệ mới, cực nhanh
-input_file = "test_prompts.txt"
-output_folder = "output_sdxl_turbo"
-os.makedirs(output_folder, exist_ok=True)
+# ==============================================================================
+# 1. CẤU HÌNH (CONFIG)
+# ==============================================================================
+# Model SD 1.5 chuẩn (HuggingFace)
+model_id = "runwayml/stable-diffusion-v1-5"
 
-# 2. Tải Pipeline (Dùng SDXL để có chất lượng 1024x1024)
-pipe = AutoPipelineForText2Image.from_pretrained(
+# Đường dẫn file chứa prompt
+input_file = "/datausers3/kttv/tien/ClassificationProjectHimawari/SE/SE2025-14.3/04_inference/test_prompts.txt"
+output_folder = "output_images_base_sd15"
+
+# Cấu hình sinh ảnh
+# Prompt phụ trợ để ảnh đẹp hơn (SD 1.5 gốc rất cần cái này)
+style_suffix = ", highly detailed, 8k resolution, cinematic lighting, photorealistic" 
+negative_prompt = "bad anatomy, blurry, low quality, watermark, text, signature, ugly, deformed, extra limbs"
+
+device = "cuda"
+batch_size = 1 # Xử lý từng ảnh một để tiết kiệm VRAM
+
+# ==============================================================================
+# 2. LOAD MODEL (BASE ONLY)
+# ==============================================================================
+print(f"-> Đang tải Base Model: {model_id}...")
+
+pipe = StableDiffusionPipeline.from_pretrained(
     model_id,
-    torch_dtype=torch.float16,
-    variant="fp16"
+    torch_dtype=torch.float16, # Dùng fp16 cho nhanh và nhẹ
+    use_safetensors=True,
+    safety_checker=None        # Tắt bộ lọc nội dung để tránh lỗi đen hình
 )
-pipe.to("cuda")
 
-# Tối ưu thêm cho GPU yếu
+# Tối ưu hóa bộ nhớ
+pipe.to(device)
+# pipe.enable_xformers_memory_efficient_attention() # Bật dòng này nếu cài xformers để render nhanh hơn
 
-# 3. Đọc dữ liệu
-if os.path.exists(input_file):
-    with open(input_file, "r") as f:
-        prompts = [l.strip() for l in f.readlines() if l.strip()]
+# ==============================================================================
+# 3. SINH ẢNH
+# ==============================================================================
+if not os.path.exists(input_file):
+    print(f"Lỗi: Không tìm thấy file {input_file}")
+    # Nếu không có file, chạy thử 1 prompt mẫu
+    lines = ["a futuristic city with flying cars"]
 else:
-    prompts = ["A cinematic shot of a futuristic robot in a jungle"]
+    with open(input_file, "r", encoding="utf-8") as f:
+        lines = [line.strip() for line in f.readlines() if line.strip()]
 
-# 4. Sinh ảnh
-for i, prompt in enumerate(tqdm(prompts)):
+os.makedirs(output_folder, exist_ok=True)
+print(f"-> Tìm thấy {len(lines)} prompt. Bắt đầu sinh ảnh...")
+
+for i, raw_prompt in enumerate(tqdm(lines)):
+    # 1. Ghép prompt
+    full_prompt = f"{raw_prompt}{style_suffix}"
+    
+    # 2. Sinh ảnh (SD 1.5 chuẩn 512x512)
     image = pipe(
-        prompt=prompt,
-        num_inference_steps=8, # Cực nhanh
-        guidance_scale=0.5,
+        prompt=full_prompt,
+        negative_prompt=negative_prompt,
+        height=512,
         width=512,
-        height=512
+        num_inference_steps=50, # SD 1.5 gốc nên để tầm 50 steps cho chi tiết tốt
+        guidance_scale=7.5
     ).images[0]
+    
+    # 3. Lưu ảnh
+    safe_name = raw_prompt.replace(" ", "_").replace("/", "-")[:50]
+    filename = f"{output_folder}/{i+1:02d}_{safe_name}.png"
+    image.save(filename)
 
-    image.save(f"{output_folder}/img_{i}.png")
-
-print("Hoàn thành!")
+print("\n" + "="*50)
+print(f"-> HOÀN TẤT! Ảnh đã lưu tại: {output_folder}")
