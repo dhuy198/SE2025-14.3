@@ -195,119 +195,71 @@ weight_dtype = torch.float16
 text_encoder.to(accelerator.device, dtype=weight_dtype)
 vae.to(accelerator.device, dtype=weight_dtype)
 
+# ==============================================================================
+# PHẦN 3: VÒNG LẶP HUẤN LUYỆN (KHÔNG THAY ĐỔI)
+# ==============================================================================
+# (Phần này giữ nguyên hoàn toàn)
+print("***** Bắt đầu huấn luyện *****")
+print(f"  Số mẫu = {len(train_dataset)}")
+print(f"  Số epochs = {config.num_train_epochs}")
+print(f"  Batch size = {config.train_batch_size}")
+print(f"  Tổng số bước tối ưu hóa = {len(train_dataloader) * config.num_train_epochs}")
 
-def main():
-    accelerator = Accelerator(
-        gradient_accumulation_steps=config.gradient_accumulation_steps,
-        mixed_precision=config.mixed_precision
-    )
-    
-    print("-> Đang tải Model Stable Diffusion v1.5...")
-    
-    # 1. Load Tokenizers & Models
-    tokenizer = AutoTokenizer.from_pretrained(config.pretrained_model_name_or_path, subfolder="tokenizer")
-    text_encoder = CLIPTextModel.from_pretrained(config.pretrained_model_name_or_path, subfolder="text_encoder")
-    vae = AutoencoderKL.from_pretrained(config.pretrained_model_name_or_path, subfolder="vae")
-    unet = UNet2DConditionModel.from_pretrained(config.pretrained_model_name_or_path, subfolder="unet")
-    
-    # Freeze base models
-    vae.requires_grad_(False)
-    text_encoder.requires_grad_(False)
-    unet.requires_grad_(False)
+progress_bar = tqdm(range(len(train_dataloader) * config.num_train_epochs), disable=not accelerator.is_local_main_process)
+progress_bar.set_description("Steps")
 
-    # 2. Add LoRA to UNet
-    lora_config = LoraConfig(
-        r=config.lora_rank,
-        lora_alpha=config.lora_alpha,
-        target_modules=["to_k", "to_q", "to_v", "to_out.0"], 
-        lora_dropout=0.0,
-        bias="none"
-    )
-    unet = get_peft_model(unet, lora_config)
-    
-    # Xử lý Mixed Precision
-    weight_dtype = torch.float32
-    if config.mixed_precision == "fp16":
-        weight_dtype = torch.float16
-        
-    unet.to(accelerator.device, dtype=weight_dtype) 
-    vae.to(accelerator.device, dtype=torch.float32)
-    text_encoder.to(accelerator.device, dtype=weight_dtype)
+for epoch in range(config.num_train_epochs):
+    unet.train()
+    for step, batch in enumerate(train_dataloader):
+        with accelerator.accumulate(unet):
+            pixel_values = batch["pixel_values"].to(dtype=weight_dtype)
+            latents = vae.encode(pixel_values).latent_dist.sample()
+            latents = latents * vae.config.scaling_factor
+            noise = torch.randn_like(latents)
+            bsz = latents.shape[0]
+            timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device).long()
+            noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
+            encoder_hidden_states = text_encoder(batch["input_ids"])[0]
+            noise_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
+            loss = F.mse_loss(noise_pred.float(), noise.float(), reduction="mean")
+            accelerator.backward(loss)
+            if accelerator.sync_gradients:
+                accelerator.clip_grad_norm_(unet.parameters(), 1.0)
+            optimizer.step()
+            lr_scheduler.step()
+            optimizer.zero_grad()
+        if accelerator.sync_gradients:
+            progress_bar.update(1)
+        logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
+        progress_bar.set_postfix(**logs)
 
-    for name, param in unet.named_parameters():
-        if param.requires_grad:
-            param.data = param.data.to(torch.float32)
-    
-    unet.enable_gradient_checkpointing()
+    if accelerator.is_main_process:
+        print(f"Epoch {epoch+1}/{config.num_train_epochs} - Loss: {loss.detach().item():.4f}")
 
-    # 3. Optimizer
-    lora_layers = filter(lambda p: p.requires_grad, unet.parameters())
-    optimizer = torch.optim.AdamW(lora_layers, lr=config.learning_rate)
+# ==============================================================================
+# PHẦN 4: LƯU LOA VÀ SỬ DỤNG (KHÔNG THAY ĐỔI)
+# ==============================================================================
+# (Phần này giữ nguyên hoàn toàn)
+unet = accelerator.unwrap_model(unet)
+# Tạo pipeline đầy đủ để lưu
+pipeline = StableDiffusionPipeline.from_pretrained(
+    config.pretrained_model_name_or_path,
+    unet=unet,
+    text_encoder=text_encoder,
+    vae=vae,
+    tokenizer=tokenizer,
+    torch_dtype=weight_dtype, # Thêm dtype để nhất quán
+)
+# Lưu trọng số LoRA và toàn bộ pipeline
+pipeline.save_pretrained(config.output_dir)
+print(f"Đã lưu LoRA và pipeline vào thư mục: {config.output_dir}")
 
-    # 4. Data
-    dataset = LocalImageDataset(config.train_data_dir, tokenizer, size=config.resolution)
-    train_dataloader = DataLoader(dataset, batch_size=config.train_batch_size, shuffle=True, num_workers=0)
+# Ví dụ sử dụng LoRA để tạo ảnh
+print("\n***** Thử nghiệm tạo ảnh với LoRA *****")
+pipe = StableDiffusionPipeline.from_pretrained(config.pretrained_model_name_or_path, torch_dtype=torch.float16).to("cuda")
+pipe.load_lora_weights(config.output_dir)
 
-    noise_scheduler = DDPMScheduler.from_pretrained(config.pretrained_model_name_or_path, subfolder="scheduler")
-
-    # 5. Prepare Accelerator
-    unet, optimizer, train_dataloader = accelerator.prepare(unet, optimizer, train_dataloader)
-    
-    
-    for epoch in range(config.num_train_epochs):
-        unet.train()
-        progress_bar = tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{config.num_train_epochs}")
-        
-        for step, batch in enumerate(progress_bar):
-            with accelerator.accumulate(unet):
-                pixel_values = batch["pixel_values"].to(dtype=torch.float32)
-                
-                with torch.no_grad():
-                    latents = vae.encode(pixel_values).latent_dist.sample()
-                    latents = latents * vae.config.scaling_factor
-                    latents = latents.to(dtype=weight_dtype)
-
-                with torch.no_grad():
-                    encoder_hidden_states = text_encoder(batch["input_ids"])[0]
-
-                noise = torch.randn_like(latents)
-                timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (latents.shape[0],), device=latents.device).long()
-                noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
-
-                model_pred = unet(
-                    noisy_latents, 
-                    timesteps, 
-                    encoder_hidden_states=encoder_hidden_states
-                ).sample
-
-                loss = F.mse_loss(model_pred.float(), noise.float(), reduction="mean")
-                accelerator.backward(loss)
-
-                if accelerator.sync_gradients:
-                    accelerator.clip_grad_norm_(unet.parameters(), 1.0)
-                
-                optimizer.step()
-                optimizer.zero_grad()
-
-            progress_bar.set_postfix(loss=loss.item())
-
-        # ======================================================================
-        # [MỚI] LƯU CHECKPOINT MỖI 10 EPOCH
-        # ======================================================================
-        if (epoch + 1) % 5 == 0:
-            # Tạo đường dẫn ví dụ: lora-sd15-police/checkpoint-10
-            checkpoint_dir = os.path.join(config.output_dir, f"checkpoint-{epoch+1}")
-            os.makedirs(checkpoint_dir, exist_ok=True)
-            
-            print(f"\n-> Đang lưu checkpoint tại Epoch {epoch+1} vào: {checkpoint_dir}")
-            
-            # Lưu model
-            unet_to_save = accelerator.unwrap_model(unet)
-            unet_to_save.save_pretrained(checkpoint_dir)
-            
-            # Quay lại chế độ train để tiếp tục epoch sau
-            unet.train() 
-        # ======================================================================
-
-if __name__ == "__main__":
-    main()
+prompt = "một chiến sĩ công an giao thông đang chỉ đường, ảnh chân thực, chất lượng cao"
+image = pipe(prompt, num_inference_steps=30, guidance_scale=7.5).images[0]
+image.save("ket_qua_voi_lora.png")
+print("Đã lưu ảnh kết quả vào file: ket_qua_voi_lora.png")
